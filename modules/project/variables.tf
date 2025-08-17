@@ -8,16 +8,17 @@ variable "name" {
   type        = string
 }
 
-variable "environment" {
-  description = "Name of environment."
-  type        = string
+variable "administrators" {
+  description = "Administrator users."
+  type        = set(string)
 }
 
-variable "users" {
-  description = "Users to assign to project roles."
-  type = object({
-    administrators = set(string)
-    contributors   = set(string)
-    readers        = set(string)
-  })
+variable "environments" {
+  description = "Environments to create for the project."
+  type = map(object({
+    users = object({
+      contributors = set(string)
+      readers      = set(string)
+    })
+  }))
 }
