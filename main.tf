@@ -28,12 +28,12 @@ provider "github" {
   owner = "greensebastian"
 }
 
-module "demo" {
+module "satisfactory-visualizer" {
   source = "./modules/project"
 
   administrators = ["sebastianpetergreen_outlook.com#EXT#_sebastianpetergreZELYY#EXT#@sebastiangreen.onmicrosoft.com"]
-  domain         = "test"
-  name           = "demo"
+  domain         = "games"
+  name           = "satisfactory-visualizer"
   environments = {
     dev = {
       users = {
