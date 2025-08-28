@@ -9,18 +9,23 @@ on:
         required: true
 
 permissions:
-  id-token: write # required for OIDC
+  id-token: write
   contents: read
 
 jobs:
-  apply:
-    name: "Plan and apply terraform"
+  plan:
+    name: "Terraform Plan"
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    outputs:
+      plan-artifact-name: ${{ steps.meta.outputs.artifact_name }}
     steps:
       - uses: actions/checkout@v4
 
-      # 1) OIDC login -> populates 'az' CLI context
+      - id: meta
+        name: Set artifact name
+        run: echo "artifact_name=tfplan-${{ github.run_id }}.bin" >> "$GITHUB_OUTPUT"
+
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
@@ -31,21 +36,84 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # 2) Init backend with AAD auth (reuses the az login)
       - name: Terraform Init
         working-directory: ./terraform
         run: |
           terraform init \
             -backend-config="storage_account_name=${{ vars.BACKEND_STORAGE_ACCOUNT_NAME }}" \
             -backend-config="container_name=${{ vars.BACKEND_CONTAINER_NAME }}" \
-            -backend-config="key=${{ vars.BACKEND_KEY }}"\
+            -backend-config="key=${{ vars.BACKEND_KEY }}" \
             -backend-config="use_azuread_auth=true"
 
-      - name: Terraform Plan
+      - name: Terraform Plan (save plan)
         working-directory: ./terraform
-        run: terraform plan -input=false
+        run: terraform plan -input=false -out "${{ steps.meta.outputs.artifact_name }}"
 
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: ./terraform/${{ steps.meta.outputs.artifact_name }}
+          if-no-files-found: error
+
+      - name: Create readable output
+        id: tf-plan-string
         working-directory: ./terraform
-        run: terraform apply -input=false -auto-approve
+        run: |
+          TERRAFORM_PLAN=$(terraform show -no-color ${{ steps.meta.outputs.artifact_name }})
+          # Limit the output because step summary has an unknown length limit imposed.
+          TERRAFORM_PLAN=${TERRAFORM_PLAN:0:127900}
+
+          delimiter="$(openssl rand -hex 8)"
+          echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
+          echo "## Terraform Plan Output" >> $GITHUB_OUTPUT
+          echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo '```terraform' >> $GITHUB_OUTPUT
+          echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
+          echo '```' >> $GITHUB_OUTPUT
+          echo "</details>" >> $GITHUB_OUTPUT
+          echo "${delimiter}" >> $GITHUB_OUTPUT
+
+      - name: Publish readable output to task summary
+        env:
+          SUMMARY: ${{ steps.tf-plan-string.outputs.summary }}
+        run: |
+          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+
+  apply:
+    name: "Terraform Apply"
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="storage_account_name=${{ vars.BACKEND_STORAGE_ACCOUNT_NAME }}" \
+            -backend-config="container_name=${{ vars.BACKEND_CONTAINER_NAME }}" \
+            -backend-config="key=${{ vars.BACKEND_KEY }}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.plan-artifact-name }}
+          path: ./terraform
+
+      - name: Terraform Apply (using approved plan)
+        working-directory: ./terraform
+        run: terraform apply -input=false -auto-approve "${{ needs.plan.outputs.plan-artifact-name }}"
