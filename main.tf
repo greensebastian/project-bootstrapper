@@ -41,4 +41,5 @@ module "satisfactory-visualizer" {
         readers      = []
     } }
   }
+  terraform_storage_account_name = "sttfstategmsstsfvis"
 }

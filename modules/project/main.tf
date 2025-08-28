@@ -72,4 +72,5 @@ module "environment" {
     organization = split("/", github_repository.repo.full_name)[0]
     name         = split("/", github_repository.repo.full_name)[1]
   }
+  terraform_storage_account_name = "${var.terraform_storage_account_name}${each.key}"
 }

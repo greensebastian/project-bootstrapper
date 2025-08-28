@@ -22,3 +22,7 @@ variable "environments" {
     })
   }))
 }
+
+variable "terraform_storage_account_name" {
+  type = string
+}

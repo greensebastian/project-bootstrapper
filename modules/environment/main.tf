@@ -37,6 +37,8 @@ data "github_user" "current" {
   username = ""
 }
 
+data "azurerm_subscription" "current" {}
+
 data "azuread_users" "contributors" {
   user_principal_names = var.users.contributors
 }
@@ -96,6 +98,12 @@ resource "azurerm_role_assignment" "app_contributor" {
   principal_id         = azuread_service_principal.app.object_id
 }
 
+resource "azurerm_role_assignment" "tf_blob_data_contributor" {
+  scope                = azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azuread_service_principal.app.object_id
+}
+
 resource "github_repository_environment" "environment" {
   environment = var.environment_name
   repository  = var.github_repository.name
@@ -104,7 +112,68 @@ resource "github_repository_environment" "environment" {
   }
 }
 
+resource "github_actions_environment_variable" "variables" {
+  for_each = tomap({
+    arm_use_azuread = {
+      name  = "ARM_USE_AZUREAD"
+      value = "true"
+    }
+    backend_storage_account_name = {
+      name  = "BACKEND_STORAGE_ACCOUNT_NAME"
+      value = azurerm_storage_account.tfstate.name
+    }
+    backend_container_name = {
+      name  = "BACKEND_CONTAINER_NAME"
+      value = azurerm_storage_container.tfstate.name
+    }
+    backend_key = {
+      name  = "BACKEND_KEY"
+      value = var.environment_name
+    }
+  })
+  repository    = github_repository_environment.environment.repository
+  environment   = github_repository_environment.environment.environment
+  variable_name = each.value.name
+  value         = each.value.value
+}
+
+resource "github_actions_environment_secret" "secrets" {
+  for_each = tomap({
+    azure_client_id = {
+      name  = "AZURE_CLIENT_ID"
+      value = azuread_service_principal.app.client_id
+    }
+    azure_subscription_id = {
+      name  = "AZURE_SUBSCRIPTION_ID"
+      value = data.azurerm_subscription.current.subscription_id
+    }
+    azure_tenant_id = {
+      name  = "AZURE_TENANT_ID"
+      value = data.azurerm_subscription.current.tenant_id
+    }
+  })
+  repository      = github_repository_environment.environment.repository
+  environment     = github_repository_environment.environment.environment
+  secret_name     = each.value.name
+  plaintext_value = each.value.value
+}
+
 resource "azurerm_resource_group" "rg" {
   name     = module.naming.resource_group.name
   location = local.region.name
+}
+
+resource "azurerm_storage_account" "tfstate" {
+  name                            = var.terraform_storage_account_name
+  resource_group_name             = azurerm_resource_group.rg.name
+  location                        = azurerm_resource_group.rg.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  default_to_oauth_authentication = true
+}
+
+resource "azurerm_storage_container" "tfstate" {
+  name                  = "tfstate"
+  storage_account_id    = azurerm_storage_account.tfstate.id
+  container_access_type = "private"
 }

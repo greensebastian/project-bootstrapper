@@ -1,0 +1,51 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to deploy to (e.g., dev, test, prod)"
+        type: environment
+        required: true
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+jobs:
+  apply:
+    name: "Plan and apply terraform"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) OIDC login -> populates 'az' CLI context
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # 2) Init backend with AAD auth (reuses the az login)
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="storage_account_name=${{ vars.BACKEND_STORAGE_ACCOUNT_NAME }}" \
+            -backend-config="container_name=${{ vars.BACKEND_CONTAINER_NAME }}" \
+            -backend-config="key=${{ vars.BACKEND_KEY }}"\
+            -backend-config="use_azuread_auth=true"
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -input=false
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        working-directory: ./terraform
+        run: terraform apply -input=false -auto-approve
