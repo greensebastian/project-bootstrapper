@@ -1,6 +1,10 @@
 name: Terraform
 
 on:
+  push:
+    branches: ["*"]
+    paths:
+      - "terraform/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -12,11 +16,14 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  environment: ${{ inputs.environment || 'dev' }}
+
 jobs:
   plan:
     name: "Terraform Plan"
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || 'dev' }}
     outputs:
       plan-artifact-name: ${{ steps.meta.outputs.artifact_name }}
     steps:
@@ -45,9 +52,15 @@ jobs:
             -backend-config="key=${{ vars.BACKEND_KEY }}" \
             -backend-config="use_azuread_auth=true"
 
+      - name: Set workspace ${{ env.environment }}
+        working-directory: ./terraform
+        run: terraform workspace select -or-create ${{ env.environment }}
+
       - name: Terraform Plan (save plan)
         working-directory: ./terraform
         run: terraform plan -input=false -out "${{ steps.meta.outputs.artifact_name }}"
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
@@ -85,7 +98,7 @@ jobs:
     name: "Terraform Apply"
     needs: plan
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || 'dev' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,6 +120,10 @@ jobs:
             -backend-config="container_name=${{ vars.BACKEND_CONTAINER_NAME }}" \
             -backend-config="key=${{ vars.BACKEND_KEY }}" \
             -backend-config="use_azuread_auth=true"
+
+      - name: Set workspace ${{ env.environment }}
+        working-directory: ./terraform
+        run: terraform workspace select -or-create ${{ env.environment }}
 
       - name: Download plan artifact
         uses: actions/download-artifact@v4
