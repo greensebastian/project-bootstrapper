@@ -39,7 +39,14 @@ module "satisfactory-visualizer" {
       users = {
         contributors = []
         readers      = []
-    } }
+      }
+    }
+    prod = {
+      users = {
+        contributors = []
+        readers      = []
+      }
+    }
   }
   terraform_storage_account_name = "sttfstategmsstsfvis"
 }
