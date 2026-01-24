@@ -50,3 +50,20 @@ module "satisfactory-visualizer" {
   }
   terraform_storage_account_name = "sttfstategmsstsfvis"
 }
+
+module "applicable" {
+  source = "./modules/project"
+
+  administrators = ["sebastianpetergreen_outlook.com#EXT#_sebastianpetergreZELYY#EXT#@sebastiangreen.onmicrosoft.com"]
+  domain         = "career"
+  name           = "applicable"
+  environments = {
+    dev = {
+      users = {
+        contributors = []
+        readers      = []
+      }
+    }
+  }
+  terraform_storage_account_name = "sttfstatecarapplcbl"
+}
