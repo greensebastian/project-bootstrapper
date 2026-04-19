@@ -67,3 +67,20 @@ module "applicable" {
   }
   terraform_storage_account_name = "sttfstatecarapplcbl"
 }
+
+module "oracle_infra" {
+  source = "./modules/project"
+
+  administrators = ["sebastianpetergreen_outlook.com#EXT#_sebastianpetergreZELYY#EXT#@sebastiangreen.onmicrosoft.com"]
+  domain         = "infra"
+  name           = "oracle"
+  environments = {
+    dev = {
+      users = {
+        contributors = []
+        readers      = []
+      }
+    }
+  }
+  terraform_storage_account_name = "sttfstateinfraoracle"
+}

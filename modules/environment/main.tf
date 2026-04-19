@@ -104,6 +104,12 @@ resource "azurerm_role_assignment" "tf_blob_data_contributor" {
   principal_id         = azuread_service_principal.app.object_id
 }
 
+resource "azurerm_role_assignment" "tf_blob_data_contributor_admins" {
+  scope                = azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azuread_group.administrators.object_id
+}
+
 resource "github_repository_environment" "environment" {
   environment = var.environment_name
   repository  = var.github_repository.name
